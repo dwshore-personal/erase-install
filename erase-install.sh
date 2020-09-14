@@ -48,7 +48,7 @@ if [[ -f "$jamfHelper" ]]; then
     jh_erase_desc_de="Der Computer wird jetzt zurückgesetzt und neu gestartet"
     # Jamf Helper localizations - reinstall lockscreen
     jh_reinstall_title_en="Upgrading macOS"
-    jh_reinstall_heading_en="Please wait as we prepare your computer for upgrading macOS."
+    jh_reinstall_heading_en="Please wait as we prepare your computer for upgrading the OS."
     jh_reinstall_desc_en="This process will take approximately 5-10 minutes. Once completed your computer will reboot and begin the upgrade."
     jh_reinstall_title_de="Upgrading macOS"
     jh_reinstall_heading_de="Bitte warten, das Upgrade macOS wird ausgeführt."
@@ -734,11 +734,24 @@ if [[ $confirm == "yes" ]] && [[ -f "$jamfHelper" ]]; then
             echo "   [erase-install] User FAILED to confirm erase/install"
             exit 1
         fi
-    else
-        echo "   [erase-install] --confirm requires --erase argument; ignoring"
+    elif [[ $reinstall == "yes" ]]; then 
+        echo "   [reinstall-install] --confirming with user before proceeding"
+	confirmation=$("$jamfHelper" -windowType $window_type -title "${!jh_reinstall_title_en}" -alignHeading center -alignDescription natural -description "${!jh_reinstall_desc_en}" \
+            -lockHUD -icon "$jh_confirmation_icon" -button1 "${!jh_confirmation_cancel_button}" -button2 "${!jh_confirmation_button}" -defaultButton 1 -cancelButton 1 2> /dev/null)
+        buttonClicked="${confirmation:$i-1}"
+
+        if [[ "$buttonClicked" == "0" ]]; then
+            echo "   [reinstall-install] User DECLINED reinstall"
+            exit 0
+        elif [[ "$buttonClicked" == "2" ]]; then
+            echo "   [reinstall-install] User CONFIRMED reinstall"
+        else
+            echo "   [reinstall-install] User FAILED to confirm reinstall"
+            exit 1
+        fi
     fi
 elif [[ $confirm == "yes" ]] && [[ ! -f "$jamfHelper" ]]; then
-    echo "   [erase-install] Error: cannot obtain confirmation from user without jamfHelper. Cannot continue."
+    echo "   [reinstall-install] Error: cannot obtain confirmation from user without jamfHelper. Cannot continue."
     exit 1
 fi
 
