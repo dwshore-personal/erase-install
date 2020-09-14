@@ -448,8 +448,16 @@ run_installinstallmacos() {
 # Main body
 
 # Safety mechanism to prevent unwanted wipe while testing
-erase="no"
-reinstall="no"
+if [ -z "${4}" ];then
+    erase="no"
+else
+    erase=$4
+fi
+if [ -z "${5}" ];then
+    reinstall="no"
+else
+    reinstall=$5
+fi
 
 while test $# -gt 0
 do
@@ -516,6 +524,10 @@ do
             shift
             workdir="$1"
             ;;
+        --window_type)
+    		shift
+    		window_type="$1"
+            ;;
         --seedprogram*)
             seedprogram=$(echo $1 | sed -e 's|^[^=]*=||g')
             ;;
@@ -543,11 +555,24 @@ do
         --workdir*)
             workdir=$(echo $1 | sed -e 's|^[^=]*=||g')
             ;;
+        --window_type*)
+            window_type=$(echo $1 | sed -e 's|^[^=]*=||g')
+            ;;
         -h|--help) show_help
             ;;
     esac
     shift
 done
+
+#   If the window type was not set via parameter, set it to the 'utility' type
+if [ -z "${window_type}" ]; then
+    window_type=utility
+fi
+
+#   If you are using Jamf to call the script, you can use paramter $6 to call the 'confirm' flag
+if [ -n "${6}" ]; then
+    confirm=$6
+fi
 
 echo
 echo "   [erase-install] Script execution started: $(date)"
@@ -598,7 +623,7 @@ if [[ ! -d "$installmacOSApp" || $list ]]; then
     # the download is taking place.
     if [[ -f "$jamfHelper" && ($erase == "yes" || $reinstall == "yes") ]]; then
         echo "   [erase-install] Opening jamfHelper download message (language=$user_language)"
-        "$jamfHelper" -windowType hud -windowPosition ul -title "${!jh_dl_title}" -alignHeading center -alignDescription left -description "${!jh_dl_desc}" -lockHUD -icon  "$jh_dl_icon" -iconSize 100 &
+        "$jamfHelper" -windowType $window_type -windowPosition ul -title "${!jh_dl_title}" -alignHeading center -alignDescription left -description "${!jh_dl_desc}" -lockHUD -icon  "$jh_dl_icon" -iconSize 100 &
     fi
     # now run installinstallmacos or softwareupdate
     if [[ $ffi && $os_minor_version -ge 15 ]]; then
@@ -664,7 +689,7 @@ free_space_check
 # If configured to do so, display a confirmation window to the user. Note: default button is cancel
 if [[ $confirm == "yes" ]] && [[ -f "$jamfHelper" ]]; then
     if [[ $erase == "yes" ]]; then
-        confirmation=$("$jamfHelper" -windowType utility -title "${!jh_confirmation_title}" -alignHeading center -alignDescription natural -description "${!jh_confirmation_desc}" \
+        confirmation=$("$jamfHelper" -windowType $window_type -title "${!jh_confirmation_title}" -alignHeading center -alignDescription natural -description "${!jh_confirmation_desc}" \
             -lockHUD -icon "$jh_confirmation_icon" -button1 "${!jh_confirmation_cancel_button}" -button2 "${!jh_confirmation_button}" -defaultButton 1 -cancelButton 1 2> /dev/null)
         buttonClicked="${confirmation:$i-1}"
 
@@ -691,10 +716,10 @@ jh_reinstall_icon="$installmacOSApp/Contents/Resources/InstallAssistant.icns"
 
 if [[ -f "$jamfHelper" && $erase == "yes" ]]; then
     echo "   [erase-install] Opening jamfHelper full screen message (language=$user_language)"
-    "$jamfHelper" -windowType fs -title "${!jh_erase_title}" -alignHeading center -heading "${!jh_erase_title}" -alignDescription center -description "${!jh_erase_desc}" -icon "$jh_erase_icon" &
+    "$jamfHelper" -windowType $window_type -title "${!jh_erase_title}" -alignHeading center -heading "${!jh_erase_title}" -alignDescription center -description "${!jh_erase_desc}" -icon "$jh_erase_icon" &
 elif [[ $reinstall == "yes" ]]; then
     echo "   [erase-install] Opening jamfHelper full screen message (language=$user_language)"
-    "$jamfHelper" -windowType fs -title "${!jh_reinstall_title}" -alignHeading center -heading "${!jh_reinstall_heading}" -alignDescription center -description "${!jh_reinstall_desc}" -icon "$jh_reinstall_icon" &
+    "$jamfHelper" -windowType $window_type -title "${!jh_reinstall_title}" -alignHeading center -heading "${!jh_reinstall_heading}" -alignDescription center -description "${!jh_reinstall_desc}" -icon "$jh_reinstall_icon" &
     #statements
 fi
 
