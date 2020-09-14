@@ -97,6 +97,38 @@ if [[ -f "$jamfHelper" ]]; then
 fi
 
 # Functions
+quitAllApps() {
+	# Code pulled from: https://stackoverflow.com/questions/43289901/shell-script-for-closing-all-apps-open-dock-via-command-line
+	# Creates a comma-separated String of open applications and assign it to the APPS variable.
+	APPS=$(osascript -e 'tell application "System Events" to get name of (processes where background only is false)')
+
+	# Convert the comma-separated String of open applications to an Array using IFS.
+	# http://stackoverflow.com/questions/10586153/split-string-into-an-array-in-bash
+	IFS=',' read -r -a myAppsArray <<< "$APPS"	
+
+	# Loop through each item in the 'myAppsArray' Array.
+	for myApp in "${myAppsArray[@]}"
+	do
+	  # Remove space character from the start of the Array item
+	  appName=$(echo "$myApp" | sed 's/^ *//g')
+	
+	  # Avoid closing the "Finder" and your CLI tool.
+	  # Note: you may need to change "iTerm" to "Terminal"
+	  if [[ ! "$appName" == "Finder" ]]; then
+	    # quit the application
+	    echo "[quit-all] quitting: "$appName
+	    osascript -e 'quit app "'"$appName"'"'
+	    sleep 1
+	    if (ps aux | grep "$appName" | grep -v "grep" > /dev/null); then
+      		echo "$appName did not quit. Exiting script."
+      		# Use JamfHelper to tell the user what happened.
+      		"$jamfHelper" -windowType utility -title "$appName didn't quit'" -icon "$warnIcon" -description "We were unable to close $appName. Please save your work, close the app, then try again." -button1 "Okay" -cancelButton 1
+      		exit 1
+		fi
+	  fi
+	done
+}
+
 show_help() {
     echo "
     [erase-install] by @GrahamRPugh
@@ -688,6 +720,9 @@ fi
 # Jamf Helper icons for erase and re-install windows
 jh_erase_icon="$installmacOSApp/Contents/Resources/InstallAssistant.icns"
 jh_reinstall_icon="$installmacOSApp/Contents/Resources/InstallAssistant.icns"
+
+#	Quit apps gracefully before kicking off the message window and installer. 
+quitAllApps
 
 if [[ -f "$jamfHelper" && $erase == "yes" ]]; then
     echo "   [erase-install] Opening jamfHelper full screen message (language=$user_language)"
