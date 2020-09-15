@@ -97,7 +97,10 @@ if [[ -f "$jamfHelper" ]]; then
 fi
 
 # Functions
+
 quitAllApps() {
+	warnIcon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/AlertCautionIcon.icns"
+	errorIcon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/AlertStopIcon.icns"
 	# Code pulled from: https://stackoverflow.com/questions/43289901/shell-script-for-closing-all-apps-open-dock-via-command-line
 	# Creates a comma-separated String of open applications and assign it to the APPS variable.
 	APPS=$(osascript -e 'tell application "System Events" to get name of (processes where background only is false)')
@@ -116,14 +119,25 @@ quitAllApps() {
 	  # Note: you may need to change "iTerm" to "Terminal"
 	  if [[ ! "$appName" == "Finder" ]]; then
 	    # quit the application
-	    echo "[quit-all] quitting: "$appName
+	    echo "   [quit-all] Quitting: "$appName
 	    osascript -e 'quit app "'"$appName"'"'
 	    sleep 1
 	    if (ps aux | grep "$appName" | grep -v "grep" > /dev/null); then
-      		echo "$appName did not quit. Exiting script."
+      		echo "$appName did not quit. Requesting permission to force quit the app."
+            
       		# Use JamfHelper to tell the user what happened.
-      		"$jamfHelper" -windowType utility -title "$appName didn't quit'" -icon "$warnIcon" -description "We were unable to close $appName. Please save your work, close the app, then try again." -button1 "Okay" -cancelButton 1
-      		exit 1
+      		confirmation=$("$jamfHelper" -windowType utility -title "$appName didn't quit'" -icon $alertIcon -description "We were unable to close $appName. May we force the app to quit?" -button1 "Cancel" -button2 "Okay" -cancelButton 1 -defaultButton 2 2> /dev/null)
+	        buttonClicked="${confirmation:$i-1}"
+        	if [[ "$buttonClicked" == "0" ]]; then
+            	echo "   [quit-all] User DECLINED forcequit"
+            	exit 0
+        	elif [[ "$buttonClicked" == "2" ]]; then
+            	echo "   [quit-all] User CONFIRMED forcequit"
+                pkill $appName
+        	else
+            	echo "   [quit-all] User FAILED to confirm forcequit"
+            	exit 1
+        	fi
 		fi
 	  fi
 	done
@@ -749,7 +763,7 @@ fi
 # check for packages then add install_package_list to end of command line (empty if no packages found)
 find_extra_packages
 
-# add --preservecontainer to the install arguments if specified
+# add --preservecontainer to the install arguments if specified
 if [[ "$installer_os_version" -ge "14" && $preservecontainer == "yes" ]]; then
     install_args+=("--preservecontainer")
 fi
