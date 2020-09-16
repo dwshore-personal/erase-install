@@ -38,7 +38,7 @@ jamfHelper="/Library/Application Support/JAMF/bin/jamfHelper.app/Contents/MacOS/
 if [[ -f "$jamfHelper" ]]; then
     # Jamf Helper localizations - download window
     jh_dl_title_en="Downloading macOS"
-    jh_dl_desc_en="We need to download the macOS installer to your computer; this will take several minutes."
+    jh_dl_desc_en="We need to download the macOS installer to your computer; this will take some time. You can continue working in the meantime."
     jh_dl_title_de="Download macOS"
     jh_dl_desc_de="Der macOS Installer wird heruntergeladen, dies dauert mehrere Minuten."
     # Jamf Helper localizations - erase lockscreen
@@ -48,8 +48,8 @@ if [[ -f "$jamfHelper" ]]; then
     jh_erase_desc_de="Der Computer wird jetzt zurückgesetzt und neu gestartet"
     # Jamf Helper localizations - reinstall lockscreen
     jh_reinstall_title_en="Upgrading macOS"
-    jh_reinstall_heading_en="Please wait as we prepare your computer for upgrading macOS."
-    jh_reinstall_desc_en="This process will take approximately 5-10 minutes. Once completed your computer will reboot and begin the upgrade."
+    jh_reinstall_heading_en="Please wait as we prepare your computer for upgrading the OS."
+    jh_reinstall_desc_en="This process will take approximately 15-20 minutes. Once completed your computer will reboot and begin the upgrade."
     jh_reinstall_title_de="Upgrading macOS"
     jh_reinstall_heading_de="Bitte warten, das Upgrade macOS wird ausgeführt."
     jh_reinstall_desc_de="Dieser Prozess benötigt ungefähr 5-10 Minuten. Der Mac startet anschliessend neu und beginnt mit dem Update."
@@ -126,14 +126,14 @@ quitAllApps() {
       		echo "$appName did not quit. Requesting permission to force quit the app."
             
       		# Use JamfHelper to tell the user what happened.
-      		confirmation=$("$jamfHelper" -windowType utility -title "$appName didn't quit'" -icon $alertIcon -description "We were unable to close $appName. May we force the app to quit?" -button1 "Cancel" -button2 "Okay" -cancelButton 1 -defaultButton 2 2> /dev/null)
+      		confirmation=$("$jamfHelper" -windowType utility -title "$appName didn't quit'" -icon $warnIcon -description "We were unable to close $appName. May we force the app to quit?" -button1 "Cancel" -button2 "Okay" -cancelButton 1 -defaultButton 2 2> /dev/null)
 	        buttonClicked="${confirmation:$i-1}"
         	if [[ "$buttonClicked" == "0" ]]; then
             	echo "   [quit-all] User DECLINED forcequit"
             	exit 0
         	elif [[ "$buttonClicked" == "2" ]]; then
             	echo "   [quit-all] User CONFIRMED forcequit"
-                pkill $appName
+                kill_process "$appName"
         	else
             	echo "   [quit-all] User FAILED to confirm forcequit"
             	exit 1
@@ -493,9 +493,20 @@ run_installinstallmacos() {
 
 # Main body
 
+# Checking Jamf parameters before continuing and double checking the erase setting.
+erase=$4
+    echo "     [param-check] Erase set to: $4"
+reinstall=$5
+    echo "     [param-check] Reinstall set to: $5"
+confirm=$6
+    echo "     [param-check] Confirm set to: $6"
+window_type=$7
+    echo "     [param-check] Window_type set to: $7"
+
 # Safety mechanism to prevent unwanted wipe while testing
-erase="no"
-reinstall="no"
+if [ -z $erase ];then
+    erase="no"
+fi
 
 while test $# -gt 0
 do
@@ -562,6 +573,10 @@ do
             shift
             workdir="$1"
             ;;
+        --window_type)
+    		shift
+    		window_type="$1"
+            ;;
         --seedprogram*)
             seedprogram=$(echo $1 | sed -e 's|^[^=]*=||g')
             ;;
@@ -588,6 +603,9 @@ do
             ;;
         --workdir*)
             workdir=$(echo $1 | sed -e 's|^[^=]*=||g')
+            ;;
+        --window_type*)
+            window_type=$(echo $1 | sed -e 's|^[^=]*=||g')
             ;;
         -h|--help) show_help
             ;;
@@ -644,7 +662,7 @@ if [[ ! -d "$installmacOSApp" || $list ]]; then
     # the download is taking place.
     if [[ -f "$jamfHelper" && ($erase == "yes" || $reinstall == "yes") ]]; then
         echo "   [erase-install] Opening jamfHelper download message (language=$user_language)"
-        "$jamfHelper" -windowType hud -windowPosition ul -title "${!jh_dl_title}" -alignHeading center -alignDescription left -description "${!jh_dl_desc}" -lockHUD -icon  "$jh_dl_icon" -iconSize 100 &
+        "$jamfHelper" -windowType utility -windowPosition ul -title "${!jh_dl_title}" -alignHeading center -alignDescription left -description "${!jh_dl_desc}" -lockHUD -icon  "$jh_dl_icon" -iconSize 100 &
     fi
     # now run installinstallmacos or softwareupdate
     if [[ $ffi && $os_minor_version -ge 15 ]]; then
@@ -709,8 +727,9 @@ free_space_check
 
 # If configured to do so, display a confirmation window to the user. Note: default button is cancel
 if [[ $confirm == "yes" ]] && [[ -f "$jamfHelper" ]]; then
+echo "[confirm-install] Confirm install was set to ::yes::"
     if [[ $erase == "yes" ]]; then
-        confirmation=$("$jamfHelper" -windowType utility -title "${!jh_confirmation_title}" -alignHeading center -alignDescription natural -description "${!jh_confirmation_desc}" \
+        confirmation=$("$jamfHelper" -windowType utility -title "${jh_confirmation_title}" -alignHeading center -alignDescription natural -description "${jh_confirmation_desc}" \
             -lockHUD -icon "$jh_confirmation_icon" -button1 "${!jh_confirmation_cancel_button}" -button2 "${!jh_confirmation_button}" -defaultButton 1 -cancelButton 1 2> /dev/null)
         buttonClicked="${confirmation:$i-1}"
 
@@ -723,11 +742,24 @@ if [[ $confirm == "yes" ]] && [[ -f "$jamfHelper" ]]; then
             echo "   [erase-install] User FAILED to confirm erase/install"
             exit 1
         fi
-    else
-        echo "   [erase-install] --confirm requires --erase argument; ignoring"
+    elif [[ $reinstall == "yes" ]]; then 
+        echo "   [reinstall-install] --confirming with user before proceeding"
+	confirmation=$("$jamfHelper" -windowType utility -title "${jh_reinstall_title_en}" -alignHeading center -alignDescription natural -description "${jh_reinstall_desc_en}" \
+            -lockHUD -icon "$jh_confirmation_icon" -button1 "${!jh_confirmation_cancel_button}" -button2 "${!jh_confirmation_button}" -defaultButton 1 -cancelButton 1 2> /dev/null)
+        buttonClicked="${confirmation:$i-1}"
+
+        if [[ "$buttonClicked" == "0" ]]; then
+            echo "   [reinstall-install] User DECLINED reinstall"
+            exit 0
+        elif [[ "$buttonClicked" == "2" ]]; then
+            echo "   [reinstall-install] User CONFIRMED reinstall"
+        else
+            echo "   [reinstall-install] User FAILED to confirm reinstall"
+            exit 1
+        fi
     fi
 elif [[ $confirm == "yes" ]] && [[ ! -f "$jamfHelper" ]]; then
-    echo "   [erase-install] Error: cannot obtain confirmation from user without jamfHelper. Cannot continue."
+    echo "   [reinstall-install] Error: cannot obtain confirmation from user without jamfHelper. Cannot continue."
     exit 1
 fi
 
@@ -740,10 +772,10 @@ quitAllApps
 
 if [[ -f "$jamfHelper" && $erase == "yes" ]]; then
     echo "   [erase-install] Opening jamfHelper full screen message (language=$user_language)"
-    "$jamfHelper" -windowType fs -title "${!jh_erase_title}" -alignHeading center -heading "${!jh_erase_title}" -alignDescription center -description "${!jh_erase_desc}" -icon "$jh_erase_icon" &
+    "$jamfHelper" -windowType $window_type -title "${!jh_erase_title}" -alignHeading center -heading "${!jh_erase_title}" -alignDescription center -description "${!jh_erase_desc}" -icon "$jh_erase_icon" &
 elif [[ $reinstall == "yes" ]]; then
     echo "   [erase-install] Opening jamfHelper full screen message (language=$user_language)"
-    "$jamfHelper" -windowType fs -title "${!jh_reinstall_title}" -alignHeading center -heading "${!jh_reinstall_heading}" -alignDescription center -description "${!jh_reinstall_desc}" -icon "$jh_reinstall_icon" &
+    "$jamfHelper" -windowType $window_type -title "${!jh_reinstall_title}" -alignHeading center -heading "${!jh_reinstall_heading}" -alignDescription center -description "${!jh_reinstall_desc}" -icon "$jh_reinstall_icon" &
     #statements
 fi
 
@@ -776,7 +808,7 @@ if [[ "$installer_os_version" == "12" ]]; then
     install_args+=("--applicationpath")
     install_args+=("$installmacOSApp")
 elif [[ "$installer_os_version" -ge "15" ]]; then
-    install_args+=("--forcequitapps")
+#    install_args+=("--forcequitapps")
     install_args+=("--allowremoval")
 fi
 
